@@ -1,8 +1,8 @@
-#CPP Loop
+#CPP Loop#
 
 Simple C++ message loop and timer implementation.
 
-##Usage
+##Usage##
 
 ```
 CoreUtils::event_id_t eventId;
