@@ -4,8 +4,6 @@
 
 #include "sleeper.h"
 
-
-
 namespace CoreUtils
 {
 

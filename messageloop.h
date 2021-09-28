@@ -4,9 +4,9 @@
 
 #ifndef CORE_MESSAGELOOP_H
 #define CORE_MESSAGELOOP_H
+#include "blockingqueue.h"
 #include <functional>
 #include <list>
-#include "blockingqueue.h"
 #include <mutex>
 #include <map>
 #include <condition_variable>
@@ -16,7 +16,6 @@ using event_id_t = uint32_t;
 
 namespace CoreUtils
 {
-
 
     struct EventItem
     {

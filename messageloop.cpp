@@ -4,7 +4,6 @@
 
 #include "messageloop.h"
 #include "sleeper.h"
-#include <spdlog/spdlog.h>
 #include <utility>
 
 
@@ -20,7 +19,6 @@ event_id_t CoreUtils::MessageLoop::addHandler(std::function<void(void)> handler)
 
 void CoreUtils::MessageLoop::postEvent(event_id_t event)
 {
-    spdlog::trace("Message posted {}", event);
     events.put(event);
 }
 
@@ -33,17 +31,13 @@ void CoreUtils::MessageLoop::postAndWait(event_id_t event)
 
 void CoreUtils::MessageLoop::run()
 {
-    spdlog::trace("Enter message loop");
     while (!_exit) {
         auto e = events.take();
-        spdlog::trace("Message received: {}", e);
         if (e == 0)
             break;
-        spdlog::trace("Calling handler: {}", e);
         handlerOf(e)();
         dropOnceHandler(e);
     }
-    spdlog::trace("Exit message loop");
 }
 
 void CoreUtils::MessageLoop::exit()
@@ -71,7 +65,6 @@ std::function<void(void)> & CoreUtils::MessageLoop::handlerOf(event_id_t e)
     std::lock_guard lck(registerLock);
     if (registredEvents.find(e)!= registredEvents.end())
         return registredEvents[e].handler;
-    spdlog::error("No handler for event {}", e);
     return registredEvents[0].handler;
 }
 

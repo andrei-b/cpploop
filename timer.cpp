@@ -3,36 +3,33 @@
 //
 
 #include "timer.h"
-#include "spdlog/spdlog.h"
-
-
+#include <thread>
 
 namespace CoreUtils
 {
      void Timer::stop()
      {
-         exit = true;
+         _stopped = true;
      }
 
-     Timer::Timer(MessageLoop &loop, int interval, std::function<void(void)> handler) : _interval(interval), _loop(loop)
+    Timer::Timer(MessageLoop &loop, unsigned interval, std::function<void(void)> handler) : _interval(interval), _loop(loop)
      {
          event = loop.addHandler(std::move(handler));
-         spdlog::trace("Creating timer");
          thread = std::thread([&]() {
-                while(!exit) {
+             while(!_stopped) {
                  _loop.postEvent(event);
-                 spdlog::trace("Event posted: {}", event);
-                 sleeper.sleepFor(std::chrono::milliseconds(interval));
+                 sleeper.sleepFor(std::chrono::milliseconds(_interval));
              }
-             spdlog::trace("Exiting timer");
          });
      }
 
      Timer::~Timer()
      {
-         exit = true;
+         _stopped = true;
          sleeper.wake();
          thread.join();
      }
 
-     }
+
+
+}
