@@ -11,17 +11,17 @@ namespace CoreUtils {
 
 class Timer {
 public:
-    Timer(MessageLoop & loop, unsigned interval, std::function<void(void)> handler);
+    Timer(MessageLoop & loop, unsigned interval, Callback && handler);
     ~Timer();
 
     void stop();
 private:
     unsigned _interval = 0;
-    MessageLoop & _loop;
-    bool _stopped = false;
-    int event = 0;
+    MessageLoop & mLoop;
+    bool mStopped = false;
     std::thread thread;
-    Sleeper sleeper;
+    Callback mHandler;
+    Sleeper mSleeper;
 };
 
 }

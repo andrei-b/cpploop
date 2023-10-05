@@ -5,109 +5,86 @@
 #include "messageloop.h"
 #include "sleeper.h"
 #include <utility>
+#include <string>
 
+namespace CoreUtils {
 
-CoreUtils::MessageLoop::MessageLoop() : registerLock(),baseEvent(0)
+MessageLoop::MessageLoop()
 {
-    addHandlerInternal([]{}, false);
 }
 
-event_id_t CoreUtils::MessageLoop::addHandler(std::function<void(void)> handler)
+void CoreUtils::MessageLoop::post(Callback &&callback)
 {
-    return addHandlerInternal(handler, false);
+    events.put(Callable(std::forward<Callback>(callback)));
 }
 
-void CoreUtils::MessageLoop::postEvent(event_id_t event)
+void MessageLoop::post(Callback *callaback)
 {
-    events.put(event);
+    events.put(Callable(callaback));
 }
 
-void CoreUtils::MessageLoop::postAndWait(event_id_t event)
+void MessageLoop::postAndWait(const Callback &callaback)
 {
-    Sleeper s;
-    postRoutine([&]{ handlerOf(event)(); s.wake(); });
-    s.sleepForever();
-}
-
-void CoreUtils::MessageLoop::run()
-{
-    while (!_exit) {
-        auto e = events.take();
-        if (e == 0)
-            break;
-        handlerOf(e)();
-        dropOnceHandler(e);
+    if (std::this_thread::get_id() == mRunningThreadId) {
+        throw std::string("You cannot call postAndWait from the processing thread!");
+    }
+    std::unique_lock lck(mExitMutex);
+    if (!mExit) {
+        auto & sleeper = newSleeper();
+        post([&]{
+            callaback();
+            sleeper.wake(); });
+        lck.unlock();
+        sleeper.sleepForever();
     }
 }
 
-void CoreUtils::MessageLoop::exit()
+void MessageLoop::run()
 {
-    postEvent(0);
-    _exit = true;
+    mRunningThreadId = std::this_thread::get_id();
+    while (!mExit) {
+        events.pick()();
+        events.pop();
+    }
+    mRunnning.wake();
 }
 
-event_id_t CoreUtils::MessageLoop::addHandlerInternal(std::function<void(void)> handler, bool once)
+void MessageLoop::exit()
 {
-    std::lock_guard lck(registerLock);
-    auto ne = newEvent();
-    registredEvents.insert(std::make_pair<event_id_t, CoreUtils::EventItem>(reinterpret_cast<event_id_t &&>(ne), EventItem{ne, std::move(handler), once}));
-    return ne;
+    std::unique_lock lck(mExitMutex);
+    mExit = true;
+    lck.unlock();
+    mSleeper.wake();
+    mRunnning.sleepForever();
 }
 
-void CoreUtils::MessageLoop::postRoutine(std::function<void(void)> routine)
+Sleeper &MessageLoop::newSleeper()
 {
-    auto e = addHandlerInternal(std::move(routine), true);
-    postEvent(e);
+    mSleeper.reset();
+    return mSleeper;
 }
 
-std::function<void(void)> & CoreUtils::MessageLoop::handlerOf(event_id_t e)
+MessageLoop::Callable::Callable() : mCallback([]()->void{})
 {
-    std::lock_guard lck(registerLock);
-    if (registredEvents.find(e)!= registredEvents.end())
-        return registredEvents[e].handler;
-    return registredEvents[0].handler;
 }
 
-void CoreUtils::MessageLoop::dropOnceHandler(event_id_t e)
+MessageLoop::Callable::Callable(Callback &&callback) : mCallback(std::move(callback))
 {
-    std::lock_guard lck(registerLock);
-    if (registredEvents.find(e)!= registredEvents.end())
-        if (registredEvents[e].once)
-            registredEvents.erase(e);
 }
 
-template <typename Result, typename... Params>
-void CoreUtils::MessageLoop::postRoutine(std::function<Result(Params...)> routine, Params... args)
+MessageLoop::Callable::Callable(Callback *callback) : mCallback(callback)
 {
-    postRoutine([&]{ routine(args...); });
 }
 
-template <typename Result, typename... Params>
-Result CoreUtils::MessageLoop::postRoutineAndWait(std::function<Result(Params...)> routine, Params... args)
+void MessageLoop::Callable::operator()()
 {
-    Sleeper s;
-    Result result;
-    postRoutine([&]{ result = routine(args...); s.wake();});
-    s.sleepForever();
-    return result;
+    if (std::holds_alternative<Callback>(mCallback)) {
+        std::get<Callback>(mCallback)();
+    } else {
+        auto * fptr = std::get<Callback*>(mCallback);
+        if (fptr)
+            (*fptr)();
+    }
 }
 
-template <typename Class, typename Result, typename... Params>
-void CoreUtils::MessageLoop::postMethodCall(std::function<Result(Params...)> method, Class * c, Params... args)
-{
-    auto f = std::bind(method, c);
-    postRoutine<Result, Params...>(f, args...);
 }
-
-const event_id_t BaseEventHigh = 0x80000000;
-
-event_id_t CoreUtils::MessageLoop::newEvent()
-{
-    if (baseEvent >= BaseEventHigh)
-        for(auto i = baseEvent; i > 0; i--)
-            if (registredEvents.find(i) == registredEvents.end())
-                return i;
-    return ++baseEvent;
-}
-
-

@@ -22,14 +22,15 @@ public:
     bool sleepFor(const std::chrono::duration<long, std::ratio<Rep, Period>> & time) const
     {
         std::unique_lock lock(m);
-        return !cv.wait_for(lock, time, [&]{return _wake;});
+        return !cv.wait_for(lock, time, [&]{return mWake;});
     }
     void sleepForever(); //Until He calls
     void wake();
+    void reset();
 private:
      mutable std::condition_variable cv;
      mutable std::mutex m;
-     bool _wake = false;
+     bool mWake = false;
 };
 
 

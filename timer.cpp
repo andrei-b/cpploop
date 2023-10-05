@@ -9,24 +9,23 @@ namespace CoreUtils
 {
      void Timer::stop()
      {
-         _stopped = true;
+         mStopped = true;
      }
 
-    Timer::Timer(MessageLoop &loop, unsigned interval, std::function<void(void)> handler) : _interval(interval), _loop(loop)
+     Timer::Timer(MessageLoop &loop, unsigned interval, Callback && handler) : _interval(interval), mLoop(loop), mHandler(std::move(handler))
      {
-         event = loop.addHandler(std::move(handler));
-         thread = std::thread([&]() {
-             while(!_stopped) {
-                 _loop.postEvent(event);
-                 sleeper.sleepFor(std::chrono::milliseconds(_interval));
+         thread = std::thread([this]() {
+             while(!mStopped) {
+                 mLoop.post(&mHandler);
+                 mSleeper.sleepFor(std::chrono::milliseconds(_interval));
              }
          });
      }
 
      Timer::~Timer()
      {
-         _stopped = true;
-         sleeper.wake();
+         mStopped = true;
+         mSleeper.wake();
          thread.join();
      }
 

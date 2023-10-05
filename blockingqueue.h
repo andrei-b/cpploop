@@ -14,31 +14,53 @@ namespace CoreUtils {
 template <typename T>
 class BlockingQueue {
 public:
-    BlockingQueue() : mutex(), cv(), queue() {}
+    BlockingQueue() : mMutex(), mCv(), mQueue() {}
     BlockingQueue(const BlockingQueue &rhs) = delete;
     BlockingQueue &operator=(const BlockingQueue &rhs) = delete;
 
-    void put(const T &task)
+    void put(T &&task)
     {
         {
-            std::lock_guard<std::mutex> lock(mutex);
-            queue.push(task);
+            std::lock_guard<std::mutex> lock(mMutex);
+            mQueue.emplace(std::forward<T>(task));
         }
-        cv.notify_all();
+        mCv.notify_all();
     }
 
-    T take()
+    void stop()
     {
-        std::unique_lock<std::mutex> lock(mutex);
-        cv.wait(lock, [&] { return !queue.empty(); });
-        T front(std::move(queue.front()));
-        queue.pop();
-        return front;
+        mStopped=true;
+        mCv.notify_all();
     }
+
+    T& pick()
+    {
+        std::unique_lock<std::mutex> lock(mMutex);
+        mCv.wait(lock, [&] { return !mQueue.empty() || mStopped; });
+        if (!mStopped) {
+            return mQueue.front();
+        }
+        return mEmpty;
+    }
+
+    void pop()
+    {
+        if(!mQueue.empty()) {
+            mQueue.pop();
+        }
+    }
+
+    inline bool stopped() const
+    {
+        return mStopped;
+    }
+
 private:
-    std::mutex mutex;
-    std::condition_variable cv;
-    std::queue<T> queue;
+    std::mutex mMutex;
+    std::condition_variable mCv;
+    std::queue<T> mQueue;
+    bool mStopped = false;
+    T mEmpty{};
 };
 }
 #endif  // CORE_BLOCKINGQUEUE_H

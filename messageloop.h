@@ -5,54 +5,52 @@
 #ifndef CORE_MESSAGELOOP_H
 #define CORE_MESSAGELOOP_H
 #include "blockingqueue.h"
+#include "sleeper.h"
 #include <functional>
 #include <list>
 #include <mutex>
 #include <map>
 #include <condition_variable>
 #include <thread>
+#include <variant>
 
 using event_id_t = uint32_t;
 
 namespace CoreUtils
 {
 
-    struct EventItem
-    {
-        event_id_t event  = 0;
-        std::function<void(void)> handler;
-        bool once = false;
-    };
+    using Callback = std::function<void()>;
 
     class MessageLoop
     {
+        class Callable
+        {
+        public:
+            Callable();
+            explicit Callable(Callback && callback);
+            explicit Callable(Callback* callback);
+            void operator ()();
+        private:
+            std::variant<Callback, Callback*> mCallback;
+        };
     public:
         MessageLoop();
         MessageLoop(const MessageLoop &) = delete;
         MessageLoop(MessageLoop &&) = delete;
         MessageLoop &operator=(const MessageLoop &rhs) = delete;
         void run();
-        event_id_t addHandler(std::function<void(void)> handler);
-        void postEvent(event_id_t event);
-        void postAndWait(event_id_t event);
-        void postRoutine(std::function<void(void)> routine);
-        template<typename Result, typename ... Params>
-        void postRoutine(std::function<Result(Params...)> routine, Params... args);
-        template <typename Result, typename... Params>
-        Result postRoutineAndWait(std::function<Result(Params...)> routine, Params... args);
-        template<typename Class, typename Result, typename ... Params>
-        void postMethodCall(std::function<Result(Params...)> method, Class * c, Params... args);
-        [[nodiscard]] std::function<void(void)> &handlerOf(event_id_t e);
+        void post(Callback && callback);
+        void post(Callback * callaback);
+        void postAndWait(const Callback &callaback);
         void exit();
     private:
-        event_id_t addHandlerInternal(std::function<void(void)> handler, bool once);
-        void dropOnceHandler(event_id_t e);
-        event_id_t newEvent();
-        std::map<event_id_t, EventItem> registredEvents;
-        std::mutex registerLock;
-        BlockingQueue<event_id_t> events;
-        event_id_t baseEvent;
-        bool _exit = false;
+        Sleeper & newSleeper();
+        BlockingQueue<Callable> events;
+        Sleeper mSleeper;
+        bool mExit = false;
+        Sleeper mRunnning;
+        std::mutex mExitMutex;
+        std::thread::id mRunningThreadId = (std::thread::id)0;
     };
 }
 
