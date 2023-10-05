@@ -6,7 +6,15 @@
 
 int main(int, char **) {
     CoreUtils::MessageLoop loop;
-    auto t1 = std::thread([&loop](){loop.run();});
+    loop.post([]{
+        std::cout << "Routine 1 called" << std::endl;
+    }, true);
+    loop.post([]{
+        std::cout << "Routine 2 called" << std::endl;
+    }, true);
+    loop.run();
+
+    /*auto t1 = std::thread([&loop](){loop.run();});
     loop.post([]{
         std::cout << "Routine 0 called" << std::endl;
     });
@@ -23,7 +31,8 @@ int main(int, char **) {
     });
     std::cout << "OU called" << std::endl;
     loop.exit();
-    t1.join();
+    t1.join();*/
+
     /*CoreUtils::Callback cb = [&loop]{
         std::cout << "Timer handler called" << std::endl;
         loop.post([]{

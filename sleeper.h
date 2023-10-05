@@ -18,11 +18,10 @@ public:
     Sleeper(const Sleeper & rhs) = delete;
     Sleeper(Sleeper && rhs) = delete;
     Sleeper &operator=(const Sleeper &rhs) = delete;
-    template<intmax_t Rep, intmax_t Period>
-    bool sleepFor(const std::chrono::duration<long, std::ratio<Rep, Period>> & time) const
+    bool sleepFor(unsigned long time) const
     {
-        std::unique_lock lock(m);
-        return !cv.wait_for(lock, time, [&]{return mWake;});
+        std::unique_lock<std::mutex>lck(m);
+        return !cv.wait_for(lck, std::chrono::milliseconds(time), [&]{return mWake;});
     }
     void sleepForever(); //Until He calls
     void wake();

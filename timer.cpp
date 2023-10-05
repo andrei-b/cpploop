@@ -17,7 +17,7 @@ namespace CoreUtils
          thread = std::thread([this]() {
              while(!mStopped) {
                  mLoop.post(&mHandler);
-                 mSleeper.sleepFor(std::chrono::milliseconds(_interval));
+                 mSleeper.sleepFor(_interval);
              }
          });
      }

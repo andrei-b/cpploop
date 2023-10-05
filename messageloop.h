@@ -12,9 +12,6 @@
 #include <map>
 #include <condition_variable>
 #include <thread>
-#include <variant>
-
-using event_id_t = uint32_t;
 
 namespace CoreUtils
 {
@@ -27,11 +24,15 @@ namespace CoreUtils
         {
         public:
             Callable();
-            explicit Callable(Callback && callback);
-            explicit Callable(Callback* callback);
+            explicit Callable(Callback && callback, bool repeat);
+            explicit Callable(Callback* callback, bool repeat);
             void operator ()();
+            bool repeat() const;
+            void setRepeat(bool repeat);
         private:
-            std::variant<Callback, Callback*> mCallback;
+            Callback mCallback;
+            Callback * mpCallback = nullptr;
+            bool mRepeat = false;
         };
     public:
         MessageLoop();
@@ -39,18 +40,19 @@ namespace CoreUtils
         MessageLoop(MessageLoop &&) = delete;
         MessageLoop &operator=(const MessageLoop &rhs) = delete;
         void run();
-        void post(Callback && callback);
-        void post(Callback * callaback);
-        void postAndWait(const Callback &callaback);
+        void post(Callback && callback, bool repeat = false);
+        void post(Callback * callaback, bool repeat = false);
+        void postAndWait(const Callback &callback);
         void exit();
     private:
+        const std::thread::id ZeroThreadId;
         Sleeper & newSleeper();
         BlockingQueue<Callable> events;
         Sleeper mSleeper;
         bool mExit = false;
         Sleeper mRunnning;
-        std::mutex mExitMutex;
-        std::thread::id mRunningThreadId = (std::thread::id)0;
+        std::mutex mConcurrentCallMutex;
+        std::thread::id mRunningThreadId = ZeroThreadId;
     };
 }
 

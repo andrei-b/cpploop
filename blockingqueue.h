@@ -43,9 +43,20 @@ public:
         return mEmpty;
     }
 
+    void revolve()
+    {
+        std::unique_lock<std::mutex> lock(mMutex);
+        mCv.wait(lock, [&] { return !mQueue.empty() || mStopped; });
+        if (!mStopped) {
+            mQueue.push(std::move(mQueue.front()));
+        }
+    }
+
     void pop()
     {
-        if(!mQueue.empty()) {
+        std::unique_lock<std::mutex> lock(mMutex);
+        mCv.wait(lock, [&] { return !mQueue.empty() || mStopped; });
+        if (!mQueue.empty()) {
             mQueue.pop();
         }
     }

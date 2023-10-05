@@ -9,30 +9,31 @@
 
 namespace CoreUtils {
 
-MessageLoop::MessageLoop()
+MessageLoop::MessageLoop() : ZeroThreadId(std::thread::id(0))
 {
 }
 
-void CoreUtils::MessageLoop::post(Callback &&callback)
+void CoreUtils::MessageLoop::post(Callback &&callback, bool repeat)
 {
-    events.put(Callable(std::forward<Callback>(callback)));
+    events.put(Callable(std::forward<Callback>(callback), repeat));
 }
 
-void MessageLoop::post(Callback *callaback)
+void MessageLoop::post(Callback *callaback, bool repeat)
 {
-    events.put(Callable(callaback));
+    events.put(Callable(callaback, repeat));
 }
 
-void MessageLoop::postAndWait(const Callback &callaback)
+void MessageLoop::postAndWait(const Callback &callback)
 {
+    std::unique_lock<std::mutex> lck(mConcurrentCallMutex);
     if (std::this_thread::get_id() == mRunningThreadId) {
-        throw std::string("You cannot call postAndWait from the processing thread!");
+        callback();
+        return;
     }
-    std::unique_lock lck(mExitMutex);
     if (!mExit) {
         auto & sleeper = newSleeper();
         post([&]{
-            callaback();
+            callback();
             sleeper.wake(); });
         lck.unlock();
         sleeper.sleepForever();
@@ -41,9 +42,17 @@ void MessageLoop::postAndWait(const Callback &callaback)
 
 void MessageLoop::run()
 {
+    std::unique_lock<std::mutex> lck(mConcurrentCallMutex);
+    if (mRunningThreadId != ZeroThreadId) {
+        return;
+    }
     mRunningThreadId = std::this_thread::get_id();
+    lck.unlock();
     while (!mExit) {
         events.pick()();
+        if (events.pick().repeat()) {
+            events.revolve();
+        }
         events.pop();
     }
     mRunnning.wake();
@@ -51,7 +60,7 @@ void MessageLoop::run()
 
 void MessageLoop::exit()
 {
-    std::unique_lock lck(mExitMutex);
+    std::unique_lock<std::mutex> lck(mConcurrentCallMutex);
     mExit = true;
     lck.unlock();
     mSleeper.wake();
@@ -68,23 +77,32 @@ MessageLoop::Callable::Callable() : mCallback([]()->void{})
 {
 }
 
-MessageLoop::Callable::Callable(Callback &&callback) : mCallback(std::move(callback))
+MessageLoop::Callable::Callable(Callback &&callback, bool repeat) : mCallback(std::move(callback)), mRepeat(repeat)
 {
 }
 
-MessageLoop::Callable::Callable(Callback *callback) : mCallback(callback)
+MessageLoop::Callable::Callable(Callback *callback, bool repeat) : mpCallback(callback), mRepeat(repeat)
 {
 }
 
 void MessageLoop::Callable::operator()()
 {
-    if (std::holds_alternative<Callback>(mCallback)) {
-        std::get<Callback>(mCallback)();
-    } else {
-        auto * fptr = std::get<Callback*>(mCallback);
-        if (fptr)
-            (*fptr)();
+    if (mpCallback) {
+        (*mpCallback)();
     }
+    else {
+        mCallback();
+    }
+}
+
+bool MessageLoop::Callable::repeat() const
+{
+    return mRepeat;
+}
+
+void MessageLoop::Callable::setRepeat(bool repeat)
+{
+    mRepeat = repeat;
 }
 
 }

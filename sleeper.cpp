@@ -9,13 +9,13 @@ namespace CoreUtils
 
 void Sleeper::sleepForever()
 {
-    std::unique_lock lock(m);
+    std::unique_lock<std::mutex> lock(m);
     cv.wait(lock,[&]{return mWake;});
 }
 
 void Sleeper::wake()
 {
-    std::unique_lock lock(m);
+    std::unique_lock<std::mutex> lock(m);
     mWake=true;
     cv.notify_all();
 }
